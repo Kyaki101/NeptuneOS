@@ -33,6 +33,9 @@ struct ColorCode(u8);
 impl ColorCode {
     fn new(foreground: Color, background: Color) -> ColorCode {
         ColorCode((background as u8) << 4 | (foreground as u8))
+        //we shift background 4 bits because that's where the vga_buffer
+        //gets the background color, and foreground is obtained by the last
+        //4 bits
     }
 }
 
@@ -43,12 +46,14 @@ struct ScreenChar {
     color_code: ColorCode,
 }
 
-const BUFFER_HEIGHT: usize = 25;
-const BUFFER_WIDTH: usize = 80;
+const BUFFER_HEIGHT: usize = 25; //height of VGA BUFFER
+const BUFFER_WIDTH: usize = 80; //width of VGA BUFFER
 
 #[repr(transparent)]
 struct Buffer {
     chars: [[Volatile<ScreenChar>; BUFFER_WIDTH]; BUFFER_HEIGHT],
+    //we add volatile so the compiler doesn't ignore this
+    //yes, the compiler is weird like that
 }
 
 pub struct Writer {
@@ -59,6 +64,8 @@ pub struct Writer {
 
 
 impl Writer {
+    //characters will always be written in the last line
+    //to recreate the feel of a normal terminal
     pub fn write_byte(&mut self, byte: u8) {
         match byte{
 
@@ -74,12 +81,13 @@ impl Writer {
                 self.buffer.chars[row][col].write(ScreenChar {
                     ascii_character: byte,
                     color_code,
-                });
+                });//assigns values to vga buffer slot
                 self.column_position += 1;
             }
         }
     }
 
+    //simple code to handle new lines
     fn new_line(&mut self) {
         for row in 1..BUFFER_HEIGHT{
             for col in 0..BUFFER_WIDTH{
@@ -104,6 +112,7 @@ impl Writer {
     }
 
     
+    //simple code to write strings
     pub fn write_string(&mut self, s: &str){
         for byte in s.bytes() {
             match byte {
@@ -117,6 +126,7 @@ impl Writer {
     
 }
 
+//implementing string formatter so that printing numbers is easier 
 impl fmt::Write for Writer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.write_string(s);
@@ -126,12 +136,19 @@ impl fmt::Write for Writer {
 
 
 lazy_static! {
+    //lazy static needed because of compilation errors
     pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
         column_position: 0,
         color_code: ColorCode::new(Color::White, Color::Black),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+        //the pointer start at 0xb8000 because that's index 0 of the VGA BUFFER
     });
 }
+
+
+//Not even I undersant macro declaration
+//bassicaly just adding function to print macros for convenience
+//not much science here
 
 #[macro_export]
 macro_rules! print {
